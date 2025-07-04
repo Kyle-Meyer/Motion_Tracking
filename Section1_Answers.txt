@@ -1,0 +1,106 @@
+===============================================================
+                  QUESTION 1
+===============================================================
+
+Given a set of images (I1 , I2 , ....In ), describe what’s the expected output of each of the following
+image operations. (10 pts)
+a) Inew = (I2 – I1 )
+  This will create a difference image showing the signed pixel-wise difference between I2 and I1, this will contain:
+      - Positive values where I2 is brighter than I1 
+      - Negative values where I2 is darker than I1 
+      - Zero values where I2 and I1 are equal brightness
+  Since the result may contain negative pixel values, we often have to blanket shift the range or display it in a signed format 
+
+b) Inew = abs(I2 – I1 )
+  This produces the absolute difference image, showing the magnitude of change betwen the two images wihtout regard to direction,
+  this will contain:
+    - Only positive values representing the abosolute difference at pixel N between images I1 and I2
+    - Bright regions where the images differ significantly
+    - Dark/black regions where the images are similar 
+  This is best used for motion detection and will likely be some layer of computation used in this project
+
+c) Inew = avg(I1 , I2 , I3 , I4 ) //per pixel
+  This creates an averaged image by computing the mean value at each pixel location across all input images, resulting in:
+    - Reduced noise
+    - smooths out the scene 
+    - may blur moving objects if they appear in different positions across the image 
+  Note that this is the arithmetic mean (I1 + I2 + I3 + ... IN) / N for all pixels, M in an image 
+
+d) Inew = std(I1 , I2 , I3 , I4 ) //per pixel
+  this is the standard deviating, showing the pixel-wise variability across the four input images, the ouput represents:
+    - High values (brightness) where theres significant variation across the four images at that location 
+    - Low values (darkness) where the pixel values are consistent across all images 
+  This is useful for detecting areas of change (which includes motion), and will alos be used as a layer of computation in this project
+  Each pixel value is the standard deviation across all images, N in the set.
+
+===============================================================
+                  QUESTION 2
+===============================================================
+
+What’s a normal or Gaussian distribution? Explain each of the parameters that comprise a normal
+distribution. It might be helpful to draw a sample normal distribution. 
+
+  also known as a Gaussian Distribution, this is a continuous probability distribution that forms the classic bell curve shape. 
+  The normal distribution is:
+
+    Symmetric around its center (mean)
+    Bell-shaped with a single peak
+    Continuous across all real numbers
+    Defined by exactly two parameters
+
+  Parameters
+  1. Mean (μ - mu)
+
+    The center of the distribution
+    Determines where the peak of the bell curve is located
+    The point around which the distribution is symmetric
+    Also equals the median and mode in a normal distribution
+
+  2. Standard Deviation (σ - sigma)
+
+    Controls the width or spread of the distribution
+    Larger σ = wider, flatter curve
+    Smaller σ = narrower, taller curve
+    Determines how concentrated the data is around the mean
+
+  For motion tracking this could be useful for noise modeling, which can help us eliminate it using Fourier Transforms, or Gaussian Mixture Models.
+  It may also be useful in feature detection, as the likelihood of edges and corners often follows normal distributions
+
+
+===============================================================
+                  QUESTION 3
+===============================================================
+
+Given a set of images (I1 , I2 , I3 , I4 ) of a static scene captured from a static camera. Do you expect
+the images to be equal? (i.e. for every pixel to have the same value?) Why or why not? 
+  
+  I would not expect them to be equal just because of the presence of noise. Which can often result from things like:
+    - thermal noise in the camera's sensor
+    - The qauntum nature of light producing noise naturally 
+    - The electron noise when converting from analogue to digital medium 
+
+  not to mention the miriad of other factors that can change. A scene is never truly static, there is likely some external 
+  force or set of actors that interact with the scene as a whole, even beyond the pripheral of a camera.
+
+  This combined with noise is the exact reason why pixel differences would follow a normal distribution 
+
+
+===============================================================
+                  QUESTION 4
+===============================================================
+
+Given a set of images (I1 , I2 , I3 , I4 ) captured from a static camera. If you were asked to model the
+background as a normal distribution, how can you accomplish that task?
+
+  To do this we would likely need to perform a per-pixel statistical analysis (as discussed in lecture's 8 and 9)
+  
+  We would need to start by collecting pixel wise data, specifically the intensity value of each pixel across all 4 images,
+  then create a set of these intensities
+
+  For each set of pixels, we should generate two additional sets (per image) to track things like the Mean value (one set) and the Standard
+  Deviation (one set) for each pixel across all 4 images. 
+
+  With all 3 sets in hand we can generate background models for each image that will likely follow Normal Distribution. Allowing us to 
+    - See the background without noise (mean)
+    - See which areas are most variable across each image (standard deviation)
+
