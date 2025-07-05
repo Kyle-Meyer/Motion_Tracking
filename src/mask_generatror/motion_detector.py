@@ -41,7 +41,10 @@ class MotionDetector:
         cleaned_mask = self.mask_processor.clean_mask(raw_mask)
 
         #Filter by area 
-        final_mask = self.mask_processor.filter_by_area(cleaned_mask)
+        area_filtered_mask = self.mask_processor.filter_by_area(cleaned_mask)
+        
+        #fill gaps if chosen 
+        final_mask = self.mask_processor.fill_gaps_in_person(area_filtered_mask)
 
         #Store the mask 
         self.masks.append(final_mask.copy())

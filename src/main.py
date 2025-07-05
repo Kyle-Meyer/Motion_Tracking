@@ -1,7 +1,8 @@
 import cv2 
 import os 
+import glob
 import argparse 
-from mask_generatror import MotionDetector, BackgroundModelType 
+from mask_generatror import MotionDetector, BackgroundModelType
 
 def save_masks(masks, output_dir, prefix="mask_"):
     os.makedirs(output_dir, exist_ok=True)
@@ -13,7 +14,8 @@ def save_masks(masks, output_dir, prefix="mask_"):
 
 def main():
     parser = argparse.ArgumentParser(description='Motion Detection and Tracking')
-    parser.add_argument('--input', required=True, help='Input video file path')
+    parser.add_argument('--input-dir', required=True, help='Directory containing images')
+    parser.add_argument('--pattern', default='*.jpg', help='Image file pattern (e.g., "*.jpg", "*.png")')
     parser.add_argument('--output', help='where to save the output')
     parser.add_argument('--model', default='running_average', 
                        choices=['running_average', 'gaussian_mixture'],
@@ -27,49 +29,73 @@ def main():
         'gaussian_mixture': BackgroundModelType.GAUSSIAN_MIXTURE
     }
 
-    #initialize motion detector 
-    detector = MotionDetector(
-        background_model_type=model_map[args.model],
-        subtractor_params = {
-            'learning_rate': 0.01,
-            'threshold': 30.0
-        },
-        processor_params={
-            'min_contour_area': 1000
-        }
-    )
+    image_pattern = os.path.join(args.input_dir, args.pattern)
+    image_files = sorted(glob.glob(image_pattern))
 
-    #process the video 
-    cap = cv2.VideoCapture(args.input)
-
-    if not cap.isOpened():
-        print(f"Error: could not open video file {args.input}")
+    if not image_files:
+        print(f"Error, no images found in {args.input_dir} matching {args.pattern}")
         return 
+
+    # Initialize motion detector with proper parameters for each model
+    if args.model == 'running_average':
+        print("Running average across pixel width")
+
+        detector = MotionDetector(
+            background_model_type=model_map[args.model],
+            subtractor_params={
+                'learning_rate': 0.003,
+                'threshold': 8.0
+            },
+            processor_params={
+                'gaussian_blur_kernel': (1,1), 
+                'morphology_kernel_size': 2, 
+                'min_contour_area': 50,
+                'skip_area_filtering': False,
+                'use_gentle_cleaning': True,
+                'fill_person_gaps': True
+            }
+        )
+    else:  # gaussian_mixture
+        detector = MotionDetector(
+            background_model_type=model_map[args.model],
+            subtractor_params={
+                'history': 200,
+                'var_threshold': 8.0,
+                'detect_shadows': True
+            },
+            processor_params={
+                'min_contour_area': 1000
+            }
+        )
     
-    print(f"Processing Video: {args.input}")
-    print(f"Using Model: {args.model}")
-
+    masks = []
     frame_count = 0 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break 
 
+    for image_path in image_files:
+        #load the image 
+        frame = cv2.imread(image_path)
+        if frame is None: 
+            print(f"Warning could not load {image_path}")
+            continue 
+
+        #generate the mask 
         mask = detector.process_frame(frame)
-
+        masks.append(mask)
+        
         frame_count += 1 
-        if frame_count % 30 == 0:
-            print(f"Processed {frame_count} frames")
+        if frame_count % 10 == 0:
+            print(f"Processed {frame_count}/{len(image_files)} images")
 
+        #display results (optional)
         if args.display:
-            cv2.imshow('Original', frame)
-            cv2.imshow('Motion Mask', mask)
+            cv2.imshow('Original Image', frame)
+            cv2.imshow('Generated Mask', mask)
 
-            #exit key
-            if cv2.waitKey(1) & 0xFF == ord('q'):
+            #quit out key 
+            if cv2.waitKey(30) & 0xFF == ord('q'): #30ms delay between frames 
                 break
+        
 
-    cap.release()
     if args.display:
         cv2.destroyAllWindows()
 

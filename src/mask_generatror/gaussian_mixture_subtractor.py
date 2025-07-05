@@ -21,6 +21,8 @@ class GaussianMixtureSubtractor(backgroundSubtractor):
     def update_background(self, frame: np.ndarray) -> None:
         if not self.initialized:
             self.initialize(frame)
+        else: 
+            pass 
 
     def get_foreground_mask(self, frame: np.ndarray) -> np.ndarray:
         return self.bg_subtractor.apply(frame)
