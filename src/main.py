@@ -3,11 +3,19 @@ import os
 import glob
 import argparse 
 from mask_generatror import MotionDetector, BackgroundModelType
+from bounding_box import BoundingBoxTracker, BoundingBox
 
 def save_masks(masks, output_dir, prefix="mask_"):
     os.makedirs(output_dir, exist_ok=True)
 
     for i, mask in enumerate(masks):
+        filename = f"{prefix}{i:04d}.png"
+        filepath = os.path.join(output_dir, filename)
+        cv2.imwrite(filepath, mask)
+
+def save_bounding_box_frames(frames_with_boxes, output_dir, prefix="bbox_"):
+    os.makedirs(output_dir, exist_ok=True)
+    for i, mask in enumerate(frames_with_boxes):
         filename = f"{prefix}{i:04d}.png"
         filepath = os.path.join(output_dir, filename)
         cv2.imwrite(filepath, mask)
@@ -21,7 +29,10 @@ def main():
                        choices=['running_average', 'gaussian_mixture'],
                        help='Background model type')
     parser.add_argument('--display', action='store_true', help='Display results in real-time')
-
+    parser.add_argument('--min-consecutive-frames', type=int, default=30,
+                        help='Minimum consecutive frames for valid tracking')
+    parser.add_argument('--save-bbox-frames', action='store_true',
+                        help='Save frames with bounding boxes drawn')
     args = parser.parse_args()
 
     model_map = {
@@ -43,13 +54,13 @@ def main():
         detector = MotionDetector(
             background_model_type=model_map[args.model],
             subtractor_params={
-                'learning_rate': 0.003,
-                'threshold': 8.0
+                'learning_rate': 0.01,
+                'threshold': 16.0
             },
             processor_params={
-                'gaussian_blur_kernel': (1,1), 
-                'morphology_kernel_size': 2, 
-                'min_contour_area': 50,
+                'gaussian_blur_kernel': (3,3), 
+                'morphology_kernel_size': 3, 
+                'min_contour_area': 200,
                 'skip_area_filtering': False,
                 'use_gentle_cleaning': True,
                 'fill_person_gaps': True
@@ -67,8 +78,16 @@ def main():
                 'min_contour_area': 1000
             }
         )
-    
+    #init bounding box tracker 
+    bbox_tracker = BoundingBoxTracker(
+                min_contour_area=detector.mask_processor.min_contour_area,
+                max_distance_threshold = 75.0,
+                min_consecutive_frames=args.min_consecutive_frames,
+                padding = 10
+    )
+
     masks = []
+    frames_with_boxes = []
     frame_count = 0 
 
     for image_path in image_files:
@@ -82,6 +101,11 @@ def main():
         mask = detector.process_frame(frame)
         masks.append(mask)
         
+        #update the bounding box tracker and store the drawn frames
+        bbox_tracker.update_tracks(mask)
+        frame_with_boxes = bbox_tracker.draw_bounding_boxes(frame)
+        frames_with_boxes.append(frame_with_boxes)
+
         frame_count += 1 
         if frame_count % 10 == 0:
             print(f"Processed {frame_count}/{len(image_files)} images")
@@ -90,17 +114,25 @@ def main():
         if args.display:
             cv2.imshow('Original Image', frame)
             cv2.imshow('Generated Mask', mask)
+            cv2.imshow('bounding boxes', frame_with_boxes)
 
             #quit out key 
             if cv2.waitKey(30) & 0xFF == ord('q'): #30ms delay between frames 
                 break
         
+    
+    bbox_tracker.finalize_tracking()
 
     if args.display:
         cv2.destroyAllWindows()
 
-    masks_output_dir = os.path.join(args.output, 'masks')
-    save_masks(detector.get_masks(), masks_output_dir)
+    #save output 
+    if args.output:
+        masks_output_dir = os.path.join(args.output, 'masks')
+        save_masks(detector.get_masks(), masks_output_dir)
+        if args.save_bbox_frames:
+            bbox_output_dir = os.path.join(args.output, 'bounding_boxes')
+            save_bounding_box_frames(frames_with_boxes, bbox_output_dir)
 
     print(f"\nProcessing complete!")
     print(f"Total frames processed: {detector.get_frame_count()}")
