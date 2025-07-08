@@ -92,6 +92,36 @@ class BoundingBoxTracker:
 
         return matches 
     
+    def get_track_path(self, track: List[BoundingBox]) -> List[Tuple[int, int]]:
+        return [box.center for box in track]
+
+    def draw_track_paths(self, frame: np.ndarray,
+                         tracks: Optional[List[List[BoundingBox]]] = None, 
+                         path_color: Tuple[int, int, int] = (0,0,255),
+                         path_thickness: int = 2, 
+                         show_start_end: bool = True) -> np.ndarray: 
+        if tracks is None:
+            tracks = self.get_valid_tracks()
+
+        result = frame.copy()
+
+        for track_idx, track in enumerate(tracks):
+            if len(track) >= self.min_consecutive_frames:
+                path = self.get_track_path(track)
+
+                for i in range (1, len(path)):
+                    cv2.line(result, path[i-1], path[i], path_color, path_thickness)
+
+                if show_start_end and len(path) > 1:
+                    cv2.circle(result, path[0], 8, (0, 255, 0), -1)
+                    cv2.circle(result, path[-1], 8, (255, 0, 0), -1)
+
+                    label = f"Track {track_idx+1} ({len(track)} frames)"
+                    cv2.putText(result, label, (path[0][0] + 10, path[0][1] - 10),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1)
+        return result 
+
+
     def update_tracks(self, mask: np.ndarray) -> None:
         self.frame_count += 1 
         new_boxes = self.extract_bounding_boxes_from_mask(mask)
@@ -166,6 +196,13 @@ class BoundingBoxTracker:
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1)
 
         # completed frame 
+        return result 
+
+    def draw_combined_visualization(self, frame: np.ndarray) -> np.ndarray:
+        result = self.draw_track_paths(frame)
+
+        result = self.draw_bounding_boxes(result)
+        
         return result 
 
     def get_statistics(self) -> dict: 

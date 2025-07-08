@@ -20,6 +20,13 @@ def save_bounding_box_frames(frames_with_boxes, output_dir, prefix="bbox_"):
         filepath = os.path.join(output_dir, filename)
         cv2.imwrite(filepath, mask)
 
+def save_path_frames(frames_with_paths, output_dir, prefix="paths_"):
+    os.makedirs(output_dir, exist_ok=True)
+    for i, frame in enumerate(frames_with_paths):
+        filename = f"{prefix}{i:04d}.png"
+        filepath = os.path.join(output_dir, filename)
+        cv2.imwrite(filepath, frame)
+
 def main():
     parser = argparse.ArgumentParser(description='Motion Detection and Tracking')
     parser.add_argument('--input-dir', required=True, help='Directory containing images')
@@ -54,13 +61,13 @@ def main():
         detector = MotionDetector(
             background_model_type=model_map[args.model],
             subtractor_params={
-                'learning_rate': 0.01,
-                'threshold': 30.0
+                'learning_rate': 0.005,
+                'threshold': 20.0
             },
             processor_params={
-                'gaussian_blur_kernel': (5,5), 
-                'morphology_kernel_size': 5, 
-                'min_contour_area': 500,
+                'gaussian_blur_kernel': (3,3), 
+                'morphology_kernel_size': 3, 
+                'min_contour_area': 100,
                 'skip_area_filtering': False,
                 'use_gentle_cleaning': True,
                 'fill_person_gaps': True
@@ -88,6 +95,7 @@ def main():
 
     masks = []
     frames_with_boxes = []
+    frames_with_paths = []
     frame_count = 0 
 
     for image_path in image_files:
@@ -104,7 +112,10 @@ def main():
         #update the bounding box tracker and store the drawn frames
         bbox_tracker.update_tracks(mask)
         frame_with_boxes = bbox_tracker.draw_bounding_boxes(frame)
+        frame_with_paths = bbox_tracker.draw_combined_visualization(frame)
         frames_with_boxes.append(frame_with_boxes)
+        frames_with_paths.append(frame_with_paths)
+
 
         frame_count += 1 
         if frame_count % 10 == 0:
@@ -115,12 +126,13 @@ def main():
             cv2.imshow('Original Image', frame)
             cv2.imshow('Generated Mask', mask)
             cv2.imshow('bounding boxes', frame_with_boxes)
+            cv2.imshow('Paths & tracking', frame_with_paths)
 
             #quit out key 
             if cv2.waitKey(30) & 0xFF == ord('q'): #30ms delay between frames 
                 break
         
-    
+    print("finalize tracking...") 
     bbox_tracker.finalize_tracking()
 
     if args.display:
@@ -133,6 +145,9 @@ def main():
         if args.save_bbox_frames:
             bbox_output_dir = os.path.join(args.output, 'bounding_boxes')
             save_bounding_box_frames(frames_with_boxes, bbox_output_dir)
+            print("saving paths.....")
+            paths_output_dir = os.path.join(args.output, 'paths')
+            save_path_frames(frames_with_paths, paths_output_dir)
 
     print(f"\nProcessing complete!")
     print(f"Total frames processed: {detector.get_frame_count()}")
