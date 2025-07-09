@@ -32,9 +32,6 @@ class runningAverageSubtractor(backgroundSubtractor):
         #calculate difference
         diff = cv2.absdiff(frame, background)
 
-        #convert to grayscale if needed 
-        if len(diff.shape) == 3:
-            diff = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
 
         _, mask = cv2.threshold(diff, self.threshold, 255, cv2.THRESH_BINARY)
 

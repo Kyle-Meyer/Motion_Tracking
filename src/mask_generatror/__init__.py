@@ -4,6 +4,7 @@ from .background_subtractor import backgroundSubtractor
 from .running_average_subtractor import runningAverageSubtractor
 from .gaussian_mixture_subtractor import GaussianMixtureSubtractor
 from .mask_processor import MaskProcessor 
+from .median_filter import MedianFilterSubtractor
 
 __all__ = [
     'MotionDetector',
@@ -11,6 +12,7 @@ __all__ = [
     'backgroundSubtractor',
     'runningAverageSubtractor',
     'GaussianMixtureSubtractor',
+    'MedianFilterSubtractor',
     'MaskProcessor'
 ]
 

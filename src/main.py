@@ -33,7 +33,7 @@ def main():
     parser.add_argument('--pattern', default='*.jpg', help='Image file pattern (e.g., "*.jpg", "*.png")')
     parser.add_argument('--output', help='where to save the output')
     parser.add_argument('--model', default='running_average', 
-                       choices=['running_average', 'gaussian_mixture'],
+                       choices=['running_average', 'gaussian_mixture', 'median_filter'],
                        help='Background model type')
     parser.add_argument('--display', action='store_true', help='Display results in real-time')
     parser.add_argument('--min-consecutive-frames', type=int, default=30,
@@ -44,7 +44,8 @@ def main():
 
     model_map = {
         'running_average': BackgroundModelType.RUNNING_AVERAGE,
-        'gaussian_mixture': BackgroundModelType.GAUSSIAN_MIXTURE
+        'gaussian_mixture': BackgroundModelType.GAUSSIAN_MIXTURE,
+        'median_filter': BackgroundModelType.MEDIAN_FILTER
     }
 
     image_pattern = os.path.join(args.input_dir, args.pattern)
@@ -62,29 +63,46 @@ def main():
             background_model_type=model_map[args.model],
             subtractor_params={
                 'learning_rate': 0.005,
-                'threshold': 20.0
+                'threshold': 40.0
             },
             processor_params={
-                'gaussian_blur_kernel': (3,3), 
-                'morphology_kernel_size': 3, 
-                'min_contour_area': 100,
+                'gaussian_blur_kernel': (1,1), 
+                'morphology_kernel_size': 1, 
+                'min_contour_area': 1000,
                 'skip_area_filtering': False,
-                'use_gentle_cleaning': True,
-                'fill_person_gaps': True
+                'use_gentle_cleaning': False,
+                'fill_person_gaps': False
             }
         )
-    else:  # gaussian_mixture
+    elif args.model == 'gaussian_mixture':  # gaussian_mixture
         detector = MotionDetector(
             background_model_type=model_map[args.model],
             subtractor_params={
-                'history': 200,
-                'var_threshold': 8.0,
+                'history': 700,
+                'var_threshold': 75.0,
                 'detect_shadows': True
             },
             processor_params={
                 'min_contour_area': 1000
             }
         )
+    elif args.model == 'median_filter':
+        print("Using Median Filter background subtraction")
+        detector = MotionDetector(
+            background_model_type=model_map[args.model],
+            subtractor_params={
+                'buffer_size': 20,       # Number of frames to keep in buffer
+                'threshold': 40.0        # Threshold for foreground detection
+            },
+            processor_params={
+                'gaussian_blur_kernel': (5,5), 
+                'morphology_kernel_size': 3, 
+                'min_contour_area': 1000,
+                'skip_area_filtering': False,
+                'use_gentle_cleaning': False,
+                'fill_person_gaps': True
+            }
+    ) 
     #init bounding box tracker 
     bbox_tracker = BoundingBoxTracker(
                 min_contour_area=detector.mask_processor.min_contour_area,

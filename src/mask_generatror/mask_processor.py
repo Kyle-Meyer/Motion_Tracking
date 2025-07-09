@@ -20,10 +20,8 @@ class MaskProcessor:
         self.fill_person_gaps = fill_person_gaps
 
     def apply_preprocessing(self, frame: np.ndarray) -> np.ndarray:
-        #convert to grayscale 
-        if len(frame.shape) == 3:
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        
+
+        frame = cv2.medianBlur(frame, 5)
         #apply gaussian blur to reduce noise 
         blurred = cv2.GaussianBlur(frame, self.gaussian_blur_kernel, 0)
 
