@@ -29,10 +29,12 @@ def save_path_frames(frames_with_paths, output_dir, prefix="paths_"):
 
 def main():
     parser = argparse.ArgumentParser(description='Motion Detection and Tracking')
+    
+    # Basic arguments
     parser.add_argument('--input-dir', required=True, help='Directory containing images')
     parser.add_argument('--pattern', default='*.jpg', help='Image file pattern (e.g., "*.jpg", "*.png")')
     parser.add_argument('--output', help='where to save the output')
-    parser.add_argument('--model', default='running_average', 
+    parser.add_argument('--model', default='gaussian_mixture', 
                        choices=['running_average', 'gaussian_mixture', 'median_filter'],
                        help='Background model type')
     parser.add_argument('--display', action='store_true', help='Display results in real-time')
@@ -40,6 +42,49 @@ def main():
                         help='Minimum consecutive frames for valid tracking')
     parser.add_argument('--save-bbox-frames', action='store_true',
                         help='Save frames with bounding boxes drawn')
+    
+    # Running Average Subtractor parameters
+    parser.add_argument('--learning-rate', type=float, default=0.005,
+                        help='Learning rate for running average (default: 0.005)')
+    parser.add_argument('--ra-threshold', type=float, default=40.0,
+                        help='Threshold for running average subtractor (default: 40.0)')
+    
+    # Gaussian Mixture Subtractor parameters
+    parser.add_argument('--history', type=int, default=700,
+                        help='History length for Gaussian Mixture Model (default: 700)')
+    parser.add_argument('--var-threshold', type=float, default=75.0,
+                        help='Variance threshold for Gaussian Mixture Model (default: 75.0)')
+    parser.add_argument('--detect-shadows', action='store_true', default=True,
+                        help='Enable shadow detection for Gaussian Mixture Model')
+    parser.add_argument('--no-detect-shadows', dest='detect_shadows', action='store_false',
+                        help='Disable shadow detection for Gaussian Mixture Model')
+    
+    # Median Filter Subtractor parameters
+    parser.add_argument('--buffer-size', type=int, default=20,
+                        help='Buffer size for median filter (default: 20)')
+    parser.add_argument('--mf-threshold', type=float, default=40.0,
+                        help='Threshold for median filter subtractor (default: 40.0)')
+    
+    # Mask Processor parameters
+    parser.add_argument('--gaussian-blur-kernel', type=int, nargs=2, default=[1, 1],
+                        help='Gaussian blur kernel size (width height) (default: 1 1)')
+    parser.add_argument('--morphology-kernel-size', type=int, default=1,
+                        help='Morphology kernel size (default: 1)')
+    parser.add_argument('--min-contour-area', type=int, default=1000,
+                        help='Minimum contour area for filtering (default: 1000)')
+    parser.add_argument('--skip-area-filtering', action='store_true',
+                        help='Skip area filtering in mask processing')
+    parser.add_argument('--use-gentle-cleaning', action='store_true',
+                        help='Use gentle cleaning for mask processing')
+    parser.add_argument('--fill-person-gaps', action='store_true',
+                        help='Fill gaps in person detection')
+    
+    # Bounding Box Tracker parameters
+    parser.add_argument('--max-distance-threshold', type=float, default=75.0,
+                        help='Maximum distance threshold for tracking (default: 75.0)')
+    parser.add_argument('--bbox-padding', type=int, default=10,
+                        help='Padding for bounding boxes (default: 10)')
+
     args = parser.parse_args()
 
     model_map = {
@@ -55,54 +100,57 @@ def main():
         print(f"Error, no images found in {args.input_dir} matching {args.pattern}")
         return 
 
-    # Initialize motion detector with proper parameters for each model
+    # Build subtractor and processor parameters based on model type
     if args.model == 'running_average':
         print("Running average across pixel width")
-
-        detector = MotionDetector(
-            background_model_type=model_map[args.model],
-            subtractor_params={
-                'learning_rate': 0.005,
-                'threshold': 40.0
-            },
-            processor_params={
-                'gaussian_blur_kernel': (1,1), 
-                'morphology_kernel_size': 1, 
-                'min_contour_area': 1000,
-                'skip_area_filtering': False,
-                'use_gentle_cleaning': False,
-                'fill_person_gaps': False
-            }
-        )
-    elif args.model == 'gaussian_mixture':  # gaussian_mixture
-        detector = MotionDetector(
-            background_model_type=model_map[args.model],
-            subtractor_params={
-                'history': 700,
-                'var_threshold': 75.0,
-                'detect_shadows': True
-            },
-            processor_params={
-                'min_contour_area': 1000
-            }
-        )
+        subtractor_params = {
+            'learning_rate': args.learning_rate,
+            'threshold': args.ra_threshold
+        }
+        processor_params = {
+            'gaussian_blur_kernel': tuple(args.gaussian_blur_kernel), 
+            'morphology_kernel_size': args.morphology_kernel_size, 
+            'min_contour_area': args.min_contour_area,
+            'skip_area_filtering': args.skip_area_filtering,
+            'use_gentle_cleaning': args.use_gentle_cleaning,
+            'fill_person_gaps': args.fill_person_gaps
+        }
+    elif args.model == 'gaussian_mixture':
+        print("Using Gaussian Mixture Model")
+        subtractor_params = {
+            'history': args.history,
+            'var_threshold': args.var_threshold,
+            'detect_shadows': args.detect_shadows
+        }
+        processor_params = {
+            'gaussian_blur_kernel': tuple(args.gaussian_blur_kernel),
+            'morphology_kernel_size': args.morphology_kernel_size,
+            'min_contour_area': args.min_contour_area,
+            'skip_area_filtering': args.skip_area_filtering,
+            'use_gentle_cleaning': args.use_gentle_cleaning,
+            'fill_person_gaps': args.fill_person_gaps
+        }
     elif args.model == 'median_filter':
         print("Using Median Filter background subtraction")
-        detector = MotionDetector(
-            background_model_type=model_map[args.model],
-            subtractor_params={
-                'buffer_size': 20,       # Number of frames to keep in buffer
-                'threshold': 40.0        # Threshold for foreground detection
-            },
-            processor_params={
-                'gaussian_blur_kernel': (5,5), 
-                'morphology_kernel_size': 3, 
-                'min_contour_area': 1000,
-                'skip_area_filtering': False,
-                'use_gentle_cleaning': False,
-                'fill_person_gaps': True
-            }
-    ) 
+        subtractor_params = {
+            'buffer_size': args.buffer_size,
+            'threshold': args.mf_threshold
+        }
+        processor_params = {
+            'gaussian_blur_kernel': tuple(args.gaussian_blur_kernel), 
+            'morphology_kernel_size': args.morphology_kernel_size, 
+            'min_contour_area': args.min_contour_area,
+            'skip_area_filtering': args.skip_area_filtering,
+            'use_gentle_cleaning': args.use_gentle_cleaning,
+            'fill_person_gaps': args.fill_person_gaps
+        }
+
+    # Initialize motion detector with parameters from command line
+    detector = MotionDetector(
+        background_model_type=model_map[args.model],
+        subtractor_params=subtractor_params,
+        processor_params=processor_params
+    )
     #init bounding box tracker 
     bbox_tracker = BoundingBoxTracker(
                 min_contour_area=detector.mask_processor.min_contour_area,
